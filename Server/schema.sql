@@ -6,12 +6,16 @@ CREATE TABLE IF NOT EXISTS tasks (
   hours INTEGER DEFAULT 0,
   minutes INTEGER DEFAULT 0,
   seconds INTEGER DEFAULT 0,
+  position INTEGER DEFAULT 0 NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Create an index on created_at for faster queries
 CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
+
+-- Create an index on position for ordering
+CREATE INDEX IF NOT EXISTS idx_tasks_position ON tasks(position);
 
 -- Create a function to automatically update updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()

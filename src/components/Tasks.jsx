@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getTasks, deleteTask, updateTask } from '../services/api';
+import { getTasks, deleteTask, updateTask, reorderTask } from '../services/api';
 import './Tasks.css';
 
 function Tasks() {
@@ -34,6 +34,20 @@ function Tasks() {
         setError('Failed to delete task');
         console.error(err);
       }
+    }
+  };
+
+  const handleReorder = async (id, direction) => {
+    try {
+      setError(null);
+      console.log(`Reordering task ${id} ${direction}`);
+      const updatedTasks = await reorderTask(id, direction);
+      console.log('Updated tasks:', updatedTasks);
+      setTasks(updatedTasks);
+    } catch (err) {
+      const errorMessage = err.message || 'Failed to reorder task';
+      setError(errorMessage);
+      console.error('Reorder error:', err);
     }
   };
 
@@ -76,9 +90,29 @@ function Tasks() {
         </div>
       ) : (
         <div className="tasks-list">
-          {tasks.map((task) => (
+          {tasks.map((task, index) => (
             <div key={task.id} className="task-card">
               <div className="task-header">
+                <div className="task-reorder-controls">
+                  <button
+                    onClick={() => handleReorder(task.id, 'up')}
+                    className="reorder-btn up-btn"
+                    disabled={index === 0}
+                    aria-label="Move task up"
+                    title="Move up"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => handleReorder(task.id, 'down')}
+                    className="reorder-btn down-btn"
+                    disabled={index === tasks.length - 1}
+                    aria-label="Move task down"
+                    title="Move down"
+                  >
+                    ↓
+                  </button>
+                </div>
                 <h3 className="task-title">{task.title}</h3>
                 <button
                   onClick={() => handleDelete(task.id)}

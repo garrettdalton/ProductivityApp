@@ -84,3 +84,24 @@ export const deleteTask = async (id) => {
   }
 };
 
+// Reorder a task (move up or down)
+export const reorderTask = async (id, direction) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/tasks/${id}/reorder`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ direction }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `Failed to reorder task: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error reordering task:', error);
+    throw error;
+  }
+};
+

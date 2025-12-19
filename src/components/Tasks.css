@@ -102,7 +102,44 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 1rem;
   margin-bottom: 1rem;
+}
+
+.task-reorder-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.reorder-btn {
+  background: rgba(102, 126, 234, 0.2);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  color: #667eea;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  padding: 0;
+  line-height: 1;
+}
+
+.reorder-btn:hover:not(:disabled) {
+  background: rgba(102, 126, 234, 0.3);
+  border-color: rgba(102, 126, 234, 0.5);
+  transform: scale(1.1);
+}
+
+.reorder-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .task-title {
@@ -187,12 +224,22 @@
   }
 
   .task-header {
-    flex-direction: column;
+    flex-direction: row;
+    gap: 0.75rem;
+  }
+
+  .task-reorder-controls {
+    flex-direction: row;
     gap: 0.5rem;
   }
 
+  .reorder-btn {
+    width: 32px;
+    height: 32px;
+  }
+
   .delete-btn {
-    align-self: flex-end;
+    align-self: flex-start;
     margin-left: 0;
   }
 }

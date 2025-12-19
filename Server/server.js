@@ -15,8 +15,26 @@ app.use(express.json());
 // GET /api/tasks - Get all tasks
 app.get('/api/tasks', async (req, res) => {
   try {
+    // First, ensure all tasks have position values (migration helper)
+    const nullPositionCheck = await pool.query(
+      'SELECT COUNT(*) as count FROM tasks WHERE position IS NULL'
+    );
+    if (parseInt(nullPositionCheck.rows[0].count) > 0) {
+      // Initialize positions for tasks that don't have them
+      await pool.query(`
+        UPDATE tasks 
+        SET position = sub.row_num - 1
+        FROM (
+          SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC) as row_num
+          FROM tasks
+          WHERE position IS NULL
+        ) sub
+        WHERE tasks.id = sub.id
+      `);
+    }
+    
     const result = await pool.query(
-      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY created_at DESC'
+      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, COALESCE(position, 0) as position, created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY COALESCE(position, 0) ASC, created_at ASC'
     );
     res.json(result.rows);
   } catch (error) {
@@ -30,7 +48,7 @@ app.get('/api/tasks/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const result = await pool.query(
-      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, created_at as "createdAt", updated_at as "updatedAt" FROM tasks WHERE id = $1',
+      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt" FROM tasks WHERE id = $1',
       [id]
     );
     
@@ -54,15 +72,98 @@ app.post('/api/tasks', async (req, res) => {
       return res.status(400).json({ error: 'Task title is required' });
     }
     
+    // Get the maximum position and add 1 for the new task
+    const maxPositionResult = await pool.query('SELECT COALESCE(MAX(position), -1) as max_position FROM tasks');
+    const newPosition = maxPositionResult.rows[0].max_position + 1;
+    
     const result = await pool.query(
-      'INSERT INTO tasks (title, timer_enabled, hours, minutes, seconds) VALUES ($1, $2, $3, $4, $5) RETURNING id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, created_at as "createdAt", updated_at as "updatedAt"',
-      [title.trim(), timerEnabled || false, hours || 0, minutes || 0, seconds || 0]
+      'INSERT INTO tasks (title, timer_enabled, hours, minutes, seconds, position) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt"',
+      [title.trim(), timerEnabled || false, hours || 0, minutes || 0, seconds || 0, newPosition]
     );
     
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error creating task:', error);
     res.status(500).json({ error: 'Failed to create task' });
+  }
+});
+
+// PUT /api/tasks/:id/reorder - Reorder a task (move up or down)
+// This must come BEFORE /api/tasks/:id to ensure proper route matching
+app.put('/api/tasks/:id/reorder', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const id = parseInt(req.params.id);
+    const { direction } = req.body; // 'up' or 'down'
+    
+    if (!direction || (direction !== 'up' && direction !== 'down')) {
+      return res.status(400).json({ error: 'Direction must be "up" or "down"' });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Get current task
+    const currentTaskResult = await client.query(
+      'SELECT id, COALESCE(position, 0) as position FROM tasks WHERE id = $1',
+      [id]
+    );
+    
+    if (currentTaskResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Task not found' });
+    }
+    
+    const currentPosition = currentTaskResult.rows[0].position;
+    
+    // Find the task to swap with
+    let swapTaskId;
+    let swapPosition;
+    if (direction === 'up') {
+      // Find task with position less than current (move up = lower position number)
+      const swapResult = await client.query(
+        'SELECT id, position FROM tasks WHERE position < $1 ORDER BY position DESC LIMIT 1',
+        [currentPosition]
+      );
+      if (swapResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Task is already at the top' });
+      }
+      swapTaskId = swapResult.rows[0].id;
+      swapPosition = swapResult.rows[0].position;
+    } else {
+      // Find task with position greater than current (move down = higher position number)
+      const swapResult = await client.query(
+        'SELECT id, position FROM tasks WHERE position > $1 ORDER BY position ASC LIMIT 1',
+        [currentPosition]
+      );
+      if (swapResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Task is already at the bottom' });
+      }
+      swapTaskId = swapResult.rows[0].id;
+      swapPosition = swapResult.rows[0].position;
+    }
+    
+    // Swap positions
+    // Set current task to swap position
+    await client.query('UPDATE tasks SET position = $1 WHERE id = $2', [swapPosition, id]);
+    // Set swap task to current position
+    await client.query('UPDATE tasks SET position = $1 WHERE id = $2', [currentPosition, swapTaskId]);
+    
+    await client.query('COMMIT');
+    
+    // Return updated task list
+    const result = await pool.query(
+      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY position ASC, created_at ASC'
+    );
+    
+    res.json(result.rows);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error reordering task:', error);
+    res.status(500).json({ error: 'Failed to reorder task' });
+  } finally {
+    client.release();
   }
 });
 
@@ -111,14 +212,14 @@ app.put('/api/tasks/:id', async (req, res) => {
     if (updates.length === 0) {
       // No updates provided, return current task
       const result = await pool.query(
-        'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, created_at as "createdAt", updated_at as "updatedAt" FROM tasks WHERE id = $1',
+        'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt" FROM tasks WHERE id = $1',
         [id]
       );
       return res.json(result.rows[0]);
     }
     
     values.push(id);
-    const query = `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, created_at as "createdAt", updated_at as "updatedAt"`;
+    const query = `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt"`;
     
     const result = await pool.query(query, values);
     res.json(result.rows[0]);
