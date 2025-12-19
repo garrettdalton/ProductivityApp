@@ -1,42 +1,234 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
+.app {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  color: #e4e4e4;
   padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.app-title {
+  font-size: 3.5rem;
+  font-weight: 700;
+  margin-bottom: 3rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.container {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.title-form {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 2rem;
+  backdrop-filter: blur(10px);
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+.title-form label {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin-bottom: 0.75rem;
+  color: #b8b8b8;
 }
 
-.card {
-  padding: 2em;
+.title-input {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.1rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #e4e4e4;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
 }
 
-.read-the-docs {
+.title-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.title-input::placeholder {
   color: #888;
+}
+
+.timer-section {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 2rem;
+  backdrop-filter: blur(10px);
+}
+
+.timer-toggle {
+  margin-bottom: 1.5rem;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: #b8b8b8;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.timer-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.timer-inputs {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.time-input-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.time-input-group label {
+  font-size: 0.9rem;
+  color: #b8b8b8;
+  font-weight: 500;
+}
+
+.time-input {
+  width: 80px;
+  padding: 0.75rem;
+  font-size: 1.2rem;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #e4e4e4;
+  transition: all 0.3s ease;
+}
+
+.time-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+}
+
+.time-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.timer-display {
+  text-align: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  border: 2px solid rgba(102, 126, 234, 0.3);
+}
+
+.timer-time {
+  font-size: 3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #667eea;
+  letter-spacing: 0.1em;
+}
+
+.timer-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.timer-btn {
+  padding: 0.875rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.start-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.start-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.pause-btn {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+}
+
+.pause-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+}
+
+.reset-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e4e4e4;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.reset-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+@media (max-width: 640px) {
+  .app-title {
+    font-size: 2.5rem;
+  }
+
+  .timer-inputs {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .time-input {
+    width: 100px;
+  }
+
+  .timer-time {
+    font-size: 2rem;
+  }
+
+  .timer-buttons {
+    flex-direction: column;
+  }
+
+  .timer-btn {
+    width: 100%;
+  }
 }
