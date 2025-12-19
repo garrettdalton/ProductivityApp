@@ -44,7 +44,7 @@ function App() {
       // Trigger Tasks component to refresh
       setTasksUpdated(prev => prev + 1)
     } catch (error) {
-      setSubmitError('Failed to create task. Make sure the server is running on port 8000.')
+      setSubmitError('Failed to create task. Please check your connection and try again.')
       console.error('Error creating task:', error)
     } finally {
       setIsSubmitting(false)

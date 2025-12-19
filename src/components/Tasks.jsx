@@ -83,7 +83,7 @@ function Tasks() {
       const data = await getTasks();
       setTasks(data);
     } catch (err) {
-      setError('Failed to load tasks. Make sure the server is running on port 8000.');
+      setError('Failed to load tasks. Please check your connection and try again.');
       console.error(err);
     } finally {
       setLoading(false);

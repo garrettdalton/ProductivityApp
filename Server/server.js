@@ -14,29 +14,41 @@ const PORT = process.env.PORT || 8000;
 // Google Calendar OAuth configuration
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || `http://127.0.0.1:${PORT}/api/calendar/callback`;
+// Use environment variable for redirect URI, or construct from Vercel URL, or fallback to localhost
+const VERCEL_URL = process.env.VERCEL_URL;
+const FRONTEND_URL = process.env.FRONTEND_URL || (VERCEL_URL ? `https://${VERCEL_URL}` : null);
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 
+  (FRONTEND_URL ? `${FRONTEND_URL}/api/calendar/callback` : `http://127.0.0.1:${PORT}/api/calendar/callback`);
 
+// Determine allowed origins
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : FRONTEND_URL 
+    ? [FRONTEND_URL, 'http://localhost:5173', 'http://127.0.0.1:5173']
+    : ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(express.json());
 
-// Use default memory store (file store has ES module compatibility issues)
-// For production, consider using Redis or a database-backed session store
+// Session configuration - use database-backed store for Vercel (serverless)
+// For Vercel, we need to use a persistent store since memory store won't work across function invocations
+// Using PostgreSQL-based session store
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
   resave: true, // Save session even if not modified (important for OAuth)
   saveUninitialized: true, // Save uninitialized sessions
   name: 'sessionId',
   cookie: {
-    secure: false, // Set to true in production with HTTPS
+    secure: process.env.NODE_ENV === 'production', // HTTPS in production
     httpOnly: true,
     sameSite: 'lax', // Allows cookies on top-level navigation (OAuth redirects)
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    path: '/'
+    path: '/',
+    domain: process.env.NODE_ENV === 'production' ? undefined : undefined // Let browser handle domain
   }
 }));
 
@@ -404,25 +416,27 @@ app.get('/api/calendar/callback', async (req, res) => {
   console.log('Stored state:', storedState);
   console.log('Session keys:', Object.keys(req.session));
 
+  const redirectUrl = FRONTEND_URL || 'http://localhost:5173';
+
   if (error) {
     console.error('Google Calendar OAuth error from callback:', error);
-    return res.redirect(`http://localhost:5173?calendar_error=${encodeURIComponent(error)}`);
+    return res.redirect(`${redirectUrl}?calendar_error=${encodeURIComponent(error)}`);
   }
 
   if (!code) {
     console.error('No authorization code received');
-    return res.redirect(`http://localhost:5173?calendar_error=no_code`);
+    return res.redirect(`${redirectUrl}?calendar_error=no_code`);
   }
 
   if (!state) {
     console.error('No state parameter received from Google');
-    return res.redirect(`http://localhost:5173?calendar_error=no_state_received`);
+    return res.redirect(`${redirectUrl}?calendar_error=no_state_received`);
   }
 
   if (!storedState) {
     console.error('No stored state in session - session may have been lost');
     console.error('This usually means cookies/sessions are not working properly');
-    return res.redirect(`http://localhost:5173?calendar_error=session_lost`);
+    return res.redirect(`${redirectUrl}?calendar_error=session_lost`);
   }
 
   if (state !== storedState) {
@@ -430,13 +444,13 @@ app.get('/api/calendar/callback', async (req, res) => {
     console.error('  Received state:', state);
     console.error('  Stored state:', storedState);
     console.error('  Session ID:', req.sessionID);
-    return res.redirect(`http://localhost:5173?calendar_error=state_mismatch`);
+    return res.redirect(`${redirectUrl}?calendar_error=state_mismatch`);
   }
 
   console.log('State matches! Proceeding with token exchange...');
 
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    return res.redirect(`http://localhost:5173?calendar_error=server_config_missing`);
+    return res.redirect(`${redirectUrl}?calendar_error=server_config_missing`);
   }
 
   try {
@@ -453,10 +467,12 @@ app.get('/api/calendar/callback', async (req, res) => {
     req.session.googleCalendarRefreshToken = tokens.refresh_token;
     req.session.googleCalendarTokenExpiry = tokens.expiry_date;
 
-    res.redirect('http://localhost:5173?calendar_connected=true');
+    const redirectUrl = FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${redirectUrl}?calendar_connected=true`);
   } catch (error) {
     console.error('Google Calendar OAuth error:', error);
-    res.redirect(`http://localhost:5173?calendar_error=${encodeURIComponent(error.message)}`);
+    const redirectUrl = FRONTEND_URL || 'http://localhost:5173';
+    res.redirect(`${redirectUrl}?calendar_error=${encodeURIComponent(error.message)}`);
   }
 });
 
@@ -559,7 +575,13 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is running on http://localhost:${PORT} and http://127.0.0.1:${PORT}`);
-});
+// Export for Vercel serverless functions
+export default app;
+
+// Only listen if not in Vercel environment
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on http://localhost:${PORT} and http://127.0.0.1:${PORT}`);
+  });
+}
 

@@ -1,4 +1,25 @@
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+// Use environment variable for API URL, or default based on environment
+// In production (Vercel), use relative path /api
+// In development, use localhost
+const getApiBaseUrl = () => {
+  // Check for explicit environment variable first
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+  
+  // In production (Vercel), use relative path
+  // Check if we're on a production domain (not localhost)
+  if (typeof window !== 'undefined') {
+    const isProduction = window.location.hostname !== 'localhost' && 
+                         window.location.hostname !== '127.0.0.1';
+    return isProduction ? '/api' : 'http://127.0.0.1:8000/api';
+  }
+  
+  // Fallback for SSR or initial load
+  return import.meta.env.PROD ? '/api' : 'http://127.0.0.1:8000/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // Fetch all tasks
 export const getTasks = async () => {
