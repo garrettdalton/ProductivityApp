@@ -200,22 +200,32 @@ function Tasks() {
   };
 
   const playBeep = () => {
-    // Create a beep sound using Web Audio API
+    // Create 3 beeps that start low and get higher using Web Audio API
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
+    
+    // Frequencies for the 3 beeps: low, medium, high
+    const frequencies = [400, 600, 800];
+    const beepDuration = 0.3; // Duration of each beep in seconds
+    const beepGap = 0.1; // Gap between beeps in seconds
+    
+    frequencies.forEach((frequency, index) => {
+      const startTime = audioContext.currentTime + index * (beepDuration + beepGap);
+      
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
 
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
 
-    oscillator.frequency.value = 800; // Beep frequency
-    oscillator.type = 'sine';
+      oscillator.frequency.value = frequency;
+      oscillator.type = 'sine';
 
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      gainNode.gain.setValueAtTime(0.3, startTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + beepDuration);
 
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.5);
+      oscillator.start(startTime);
+      oscillator.stop(startTime + beepDuration);
+    });
   };
 
   const handleStartTimer = async (taskId) => {
