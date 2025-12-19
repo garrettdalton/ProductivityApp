@@ -52,7 +52,7 @@ function App() {
 
   return (
     <div className="app">
-      <h1 className="app-title">Productivity</h1>
+      <h1 className="app-title">Garrett's Productivity App</h1>
       
       <div className="container">
         <form className="title-form" onSubmit={handleSubmit}>
