@@ -3,27 +3,40 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import session from 'express-session';
 import pool from './db.js';
+import { google } from 'googleapis';
+import crypto from 'crypto';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+// Google Calendar OAuth configuration
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || `http://127.0.0.1:${PORT}/api/calendar/callback`;
+
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
   credentials: true
 }));
 app.use(express.json());
+
+// Use default memory store (file store has ES module compatibility issues)
+// For production, consider using Redis or a database-backed session store
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
-  resave: false,
-  saveUninitialized: false,
+  resave: true, // Save session even if not modified (important for OAuth)
+  saveUninitialized: true, // Save uninitialized sessions
+  name: 'sessionId',
   cookie: {
     secure: false, // Set to true in production with HTTPS
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    sameSite: 'lax', // Allows cookies on top-level navigation (OAuth redirects)
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    path: '/'
   }
 }));
 
@@ -316,6 +329,229 @@ app.delete('/api/tasks/:id', async (req, res) => {
     console.error('Error deleting task:', error);
     res.status(500).json({ error: 'Failed to delete task' });
   }
+});
+
+// Google Calendar OAuth endpoints
+
+// GET /api/calendar/auth - Initiate Google Calendar OAuth flow
+app.get('/api/calendar/auth', (req, res) => {
+  console.log('=== Google Calendar Auth Request ===');
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    console.error('Google Calendar credentials not configured');
+    return res.status(500).json({ error: 'Google Calendar credentials not configured' });
+  }
+
+  const oauth2Client = new google.auth.OAuth2(
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI
+  );
+
+  const state = crypto.randomBytes(16).toString('hex');
+  req.session.googleCalendarState = state;
+  console.log('Generated state:', state);
+  console.log('Session ID:', req.sessionID);
+  console.log('Redirect URI:', GOOGLE_REDIRECT_URI);
+  
+  // Save session and ensure cookie is set
+  req.session.save((err) => {
+    if (err) {
+      console.error('Error saving session:', err);
+      return res.status(500).json({ error: 'Failed to save session' });
+    }
+    
+    console.log('Session saved. State stored:', req.session.googleCalendarState);
+    console.log('Session ID:', req.sessionID);
+    
+    const scopes = [
+      'https://www.googleapis.com/auth/calendar.readonly'
+    ];
+
+    const authUrl = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: scopes,
+      state: state,
+      prompt: 'consent' // Force consent screen to get refresh token
+    });
+
+      console.log('Generated auth URL, sending response...');
+      console.log('Response headers will include Set-Cookie for session');
+      res.json({ authUrl });
+  });
+});
+
+// GET /api/calendar/callback - Handle Google Calendar OAuth callback
+app.get('/api/calendar/callback', async (req, res) => {
+  console.log('=== Google Calendar Callback ===');
+  console.log('Session ID:', req.sessionID);
+  console.log('Cookies received:', req.headers.cookie);
+  console.log('Query params:', req.query);
+  
+  const { code, state, error } = req.query;
+  
+  // Regenerate session to ensure we have a valid session
+  if (!req.sessionID) {
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('Error regenerating session:', err);
+      }
+    });
+  }
+  
+  const storedState = req.session.googleCalendarState;
+
+  console.log('Received state:', state);
+  console.log('Stored state:', storedState);
+  console.log('Session keys:', Object.keys(req.session));
+
+  if (error) {
+    console.error('Google Calendar OAuth error from callback:', error);
+    return res.redirect(`http://localhost:5173?calendar_error=${encodeURIComponent(error)}`);
+  }
+
+  if (!code) {
+    console.error('No authorization code received');
+    return res.redirect(`http://localhost:5173?calendar_error=no_code`);
+  }
+
+  if (!state) {
+    console.error('No state parameter received from Google');
+    return res.redirect(`http://localhost:5173?calendar_error=no_state_received`);
+  }
+
+  if (!storedState) {
+    console.error('No stored state in session - session may have been lost');
+    console.error('This usually means cookies/sessions are not working properly');
+    return res.redirect(`http://localhost:5173?calendar_error=session_lost`);
+  }
+
+  if (state !== storedState) {
+    console.error('State mismatch!');
+    console.error('  Received state:', state);
+    console.error('  Stored state:', storedState);
+    console.error('  Session ID:', req.sessionID);
+    return res.redirect(`http://localhost:5173?calendar_error=state_mismatch`);
+  }
+
+  console.log('State matches! Proceeding with token exchange...');
+
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    return res.redirect(`http://localhost:5173?calendar_error=server_config_missing`);
+  }
+
+  try {
+    const oauth2Client = new google.auth.OAuth2(
+      GOOGLE_CLIENT_ID,
+      GOOGLE_CLIENT_SECRET,
+      GOOGLE_REDIRECT_URI
+    );
+
+    const { tokens } = await oauth2Client.getToken(code);
+    
+    // Store tokens in session
+    req.session.googleCalendarAccessToken = tokens.access_token;
+    req.session.googleCalendarRefreshToken = tokens.refresh_token;
+    req.session.googleCalendarTokenExpiry = tokens.expiry_date;
+
+    res.redirect('http://localhost:5173?calendar_connected=true');
+  } catch (error) {
+    console.error('Google Calendar OAuth error:', error);
+    res.redirect(`http://localhost:5173?calendar_error=${encodeURIComponent(error.message)}`);
+  }
+});
+
+// GET /api/calendar/token - Get current access token (with refresh if needed)
+app.get('/api/calendar/token', async (req, res) => {
+  if (!req.session.googleCalendarAccessToken) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  // Check if token is expired and refresh if needed
+  if (req.session.googleCalendarTokenExpiry && Date.now() >= req.session.googleCalendarTokenExpiry) {
+    if (!req.session.googleCalendarRefreshToken || !GOOGLE_CLIENT_SECRET) {
+      req.session.destroy();
+      return res.status(401).json({ error: 'Token expired and refresh failed' });
+    }
+
+    try {
+      const oauth2Client = new google.auth.OAuth2(
+        GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET,
+        GOOGLE_REDIRECT_URI
+      );
+
+      oauth2Client.setCredentials({
+        refresh_token: req.session.googleCalendarRefreshToken
+      });
+
+      const { credentials } = await oauth2Client.refreshAccessToken();
+      req.session.googleCalendarAccessToken = credentials.access_token;
+      if (credentials.refresh_token) {
+        req.session.googleCalendarRefreshToken = credentials.refresh_token;
+      }
+      req.session.googleCalendarTokenExpiry = credentials.expiry_date;
+    } catch (error) {
+      console.error('Error refreshing Google Calendar token:', error);
+      req.session.destroy();
+      return res.status(401).json({ error: 'Failed to refresh token' });
+    }
+  }
+
+  res.json({ accessToken: req.session.googleCalendarAccessToken });
+});
+
+// GET /api/calendar/events - Get calendar events
+app.get('/api/calendar/events', async (req, res) => {
+  if (!req.session.googleCalendarAccessToken) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const oauth2Client = new google.auth.OAuth2(
+      GOOGLE_CLIENT_ID,
+      GOOGLE_CLIENT_SECRET,
+      GOOGLE_REDIRECT_URI
+    );
+
+    oauth2Client.setCredentials({
+      access_token: req.session.googleCalendarAccessToken
+    });
+
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    
+    // Get events for the next 30 days
+    const timeMin = new Date().toISOString();
+    const timeMax = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const response = await calendar.events.list({
+      calendarId: 'primary',
+      timeMin: timeMin,
+      timeMax: timeMax,
+      maxResults: 50,
+      singleEvents: true,
+      orderBy: 'startTime'
+    });
+
+    const events = response.data.items || [];
+    res.json({ events });
+  } catch (error) {
+    console.error('Error fetching calendar events:', error);
+    if (error.response?.status === 401) {
+      // Token expired, clear session
+      req.session.destroy();
+      return res.status(401).json({ error: 'Authentication expired. Please reconnect.' });
+    }
+    res.status(500).json({ error: 'Failed to fetch calendar events' });
+  }
+});
+
+// POST /api/calendar/logout - Logout from Google Calendar
+app.post('/api/calendar/logout', (req, res) => {
+  req.session.googleCalendarAccessToken = null;
+  req.session.googleCalendarRefreshToken = null;
+  req.session.googleCalendarTokenExpiry = null;
+  req.session.googleCalendarState = null;
+  res.json({ success: true });
 });
 
 // Health check endpoint

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { createTask } from './services/api'
 import Tasks from './components/Tasks'
+import Calendar from './components/Calendar'
 import './App.css'
 
 function App() {
@@ -145,6 +146,7 @@ function App() {
       </div>
 
       <Tasks key={tasksUpdated} />
+      <Calendar />
     </div>
   )
 }

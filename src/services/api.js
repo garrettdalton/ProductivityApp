@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = 'http://127.0.0.1:8000/api';
 
 // Fetch all tasks
 export const getTasks = async () => {
@@ -128,4 +128,83 @@ export const reorderTasks = async (taskOrders) => {
   }
 };
 
+// Google Calendar OAuth functions
+export const getGoogleCalendarAuthUrl = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/calendar/auth`, {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `Failed to get auth URL: ${response.status} ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    if (!data.authUrl) {
+      throw new Error('No auth URL in response');
+    }
+    
+    return data.authUrl;
+  } catch (error) {
+    console.error('Error getting Google Calendar auth URL:', error);
+    throw error;
+  }
+};
+
+export const getGoogleCalendarToken = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/calendar/token`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      // 401 is expected when not authenticated - return null silently
+      if (response.status === 401) {
+        return null;
+      }
+      throw new Error(`Failed to get token: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.accessToken;
+  } catch (error) {
+    // Only log non-401 errors
+    if (!error?.message?.includes('401')) {
+      console.error('Error getting Google Calendar token:', error);
+    }
+    return null;
+  }
+};
+
+export const getGoogleCalendarEvents = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/calendar/events`, {
+      credentials: 'include'
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch calendar events');
+    }
+    const data = await response.json();
+    return data.events || [];
+  } catch (error) {
+    console.error('Error fetching calendar events:', error);
+    throw error;
+  }
+};
+
+export const logoutGoogleCalendar = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/calendar/logout`, {
+      method: 'POST',
+      credentials: 'include'
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('Error logging out from Google Calendar:', error);
+    return false;
+  }
+};
 
