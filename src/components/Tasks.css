@@ -9,6 +9,70 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.spotify-auth {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.spotify-connect-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.spotify-connect-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(29, 185, 84, 0.4);
+}
+
+.spotify-connect-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spotify-status {
+  font-size: 0.85rem;
+  color: #1db954;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.spotify-disconnect-btn {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #e4e4e4;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.spotify-disconnect-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
 }
 
 .tasks-header h2 {

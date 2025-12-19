@@ -218,7 +218,7 @@ function Tasks() {
     oscillator.stop(audioContext.currentTime + 0.5);
   };
 
-  const handleStartTimer = (taskId) => {
+  const handleStartTimer = async (taskId) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task || !task.timerEnabled) return;
 
@@ -246,12 +246,7 @@ function Tasks() {
     setIsPaused(false);
   };
 
-  const handleStopTimer = () => {
-    setActiveTimer(null);
-    setIsPaused(false);
-  };
-
-  const handleSkipToNext = () => {
+  const handleSkipToNext = async () => {
     const currentTasks = tasksRef.current;
     let currentTaskId = null;
     
@@ -310,7 +305,7 @@ function Tasks() {
     if (nextTask) {
       if (nextTask.timerEnabled) {
         // Next task has timer - wait 5 seconds, then start it
-        nextTaskTimeoutRef.current = setTimeout(() => {
+        nextTaskTimeoutRef.current = setTimeout(async () => {
           const latestTasks = tasksRef.current;
           const task = latestTasks.find(t => t.id === nextTask.id);
           if (task && task.timerEnabled) {
@@ -363,11 +358,14 @@ function Tasks() {
     );
   }
 
+
   return (
     <div className="tasks-container">
       <div className="tasks-header">
         <h2>Tasks</h2>
-        <button onClick={loadTasks} className="refresh-btn">Refresh</button>
+        <div className="header-actions">
+          <button onClick={loadTasks} className="refresh-btn">Refresh</button>
+        </div>
       </div>
 
       {tasks.length === 0 ? (

@@ -3,7 +3,9 @@ const API_BASE_URL = 'http://localhost:8000/api';
 // Fetch all tasks
 export const getTasks = async () => {
   try {
-    const response = await fetch(`${API_BASE_URL}/tasks`);
+    const response = await fetch(`${API_BASE_URL}/tasks`, {
+      credentials: 'include'
+    });
     if (!response.ok) {
       throw new Error('Failed to fetch tasks');
     }
@@ -125,4 +127,5 @@ export const reorderTasks = async (taskOrders) => {
     throw error;
   }
 };
+
 

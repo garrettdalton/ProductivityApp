@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import session from 'express-session';
 import pool from './db.js';
 
 dotenv.config();
@@ -8,9 +9,23 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true
+}));
 app.use(express.json());
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // Set to true in production with HTTPS
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
 
 // GET /api/tasks - Get all tasks
 app.get('/api/tasks', async (req, res) => {
@@ -33,9 +48,18 @@ app.get('/api/tasks', async (req, res) => {
       `);
     }
     
-    const result = await pool.query(
-      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, COALESCE(position, 0) as position, created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY COALESCE(position, 0) ASC, created_at ASC'
-    );
+    // Check if spotify_playlist_id column exists, if not use NULL
+    let result;
+    try {
+      result = await pool.query(
+        'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, COALESCE(position, 0) as position, COALESCE(spotify_playlist_id, NULL) as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY COALESCE(position, 0) ASC, created_at ASC'
+      );
+    } catch (columnError) {
+      // Column doesn't exist, query without it
+      result = await pool.query(
+        'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, COALESCE(position, 0) as position, NULL as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY COALESCE(position, 0) ASC, created_at ASC'
+      );
+    }
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching tasks:', error);
@@ -48,7 +72,7 @@ app.get('/api/tasks/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     const result = await pool.query(
-      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt" FROM tasks WHERE id = $1',
+      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, spotify_playlist_id as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks WHERE id = $1',
       [id]
     );
     
@@ -66,7 +90,7 @@ app.get('/api/tasks/:id', async (req, res) => {
 // POST /api/tasks - Create a new task
 app.post('/api/tasks', async (req, res) => {
   try {
-    const { title, timerEnabled, hours, minutes, seconds } = req.body;
+    const { title, timerEnabled, hours, minutes, seconds, spotifyPlaylistId } = req.body;
     
     if (!title || title.trim() === '') {
       return res.status(400).json({ error: 'Task title is required' });
@@ -76,10 +100,20 @@ app.post('/api/tasks', async (req, res) => {
     const maxPositionResult = await pool.query('SELECT COALESCE(MAX(position), -1) as max_position FROM tasks');
     const newPosition = maxPositionResult.rows[0].max_position + 1;
     
-    const result = await pool.query(
-      'INSERT INTO tasks (title, timer_enabled, hours, minutes, seconds, position) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt"',
-      [title.trim(), timerEnabled || false, hours || 0, minutes || 0, seconds || 0, newPosition]
-    );
+    // Check if spotify_playlist_id column exists
+    let result;
+    try {
+      result = await pool.query(
+        'INSERT INTO tasks (title, timer_enabled, hours, minutes, seconds, position, spotify_playlist_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, spotify_playlist_id as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt"',
+        [title.trim(), timerEnabled || false, hours || 0, minutes || 0, seconds || 0, newPosition, spotifyPlaylistId || null]
+      );
+    } catch (columnError) {
+      // Column doesn't exist, insert without it
+      result = await pool.query(
+        'INSERT INTO tasks (title, timer_enabled, hours, minutes, seconds, position) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, NULL as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt"',
+        [title.trim(), timerEnabled || false, hours || 0, minutes || 0, seconds || 0, newPosition]
+      );
+    }
     
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -154,7 +188,7 @@ app.put('/api/tasks/:id/reorder', async (req, res) => {
     
     // Return updated task list
     const result = await pool.query(
-      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY position ASC, created_at ASC'
+      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, spotify_playlist_id as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY position ASC, created_at ASC'
     );
     
     res.json(result.rows);
@@ -188,7 +222,7 @@ app.put('/api/tasks/reorder', async (req, res) => {
     
     // Return updated task list
     const result = await pool.query(
-      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY position ASC, created_at ASC'
+      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, spotify_playlist_id as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY position ASC, created_at ASC'
     );
     
     res.json(result.rows);
@@ -205,7 +239,7 @@ app.put('/api/tasks/reorder', async (req, res) => {
 app.put('/api/tasks/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id);
-    const { title, timerEnabled, hours, minutes, seconds } = req.body;
+    const { title, timerEnabled, hours, minutes, seconds, spotifyPlaylistId } = req.body;
     
     // Check if task exists
     const checkResult = await pool.query('SELECT id FROM tasks WHERE id = $1', [id]);
@@ -242,18 +276,22 @@ app.put('/api/tasks/:id', async (req, res) => {
       updates.push(`seconds = $${paramCount++}`);
       values.push(seconds);
     }
+    if (spotifyPlaylistId !== undefined) {
+      updates.push(`spotify_playlist_id = $${paramCount++}`);
+      values.push(spotifyPlaylistId || null);
+    }
     
     if (updates.length === 0) {
       // No updates provided, return current task
       const result = await pool.query(
-        'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt" FROM tasks WHERE id = $1',
+        'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, spotify_playlist_id as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks WHERE id = $1',
         [id]
       );
       return res.json(result.rows[0]);
     }
     
     values.push(id);
-    const query = `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt"`;
+    const query = `UPDATE tasks SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, spotify_playlist_id as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt"`;
     
     const result = await pool.query(query, values);
     res.json(result.rows[0]);
@@ -285,7 +323,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Server is running' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server is running on http://localhost:${PORT} and http://127.0.0.1:${PORT}`);
 });
 

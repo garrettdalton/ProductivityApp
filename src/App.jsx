@@ -30,7 +30,7 @@ function App() {
         timerEnabled,
         hours,
         minutes,
-        seconds
+        seconds,
       })
 
       // Reset form
