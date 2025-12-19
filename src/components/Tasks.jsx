@@ -156,6 +156,9 @@ function Tasks() {
       return;
     }
 
+    // Save original tasks for error recovery
+    const originalTasks = [...tasks];
+
     // Create new array with reordered tasks
     const newTasks = [...tasks];
     const [removed] = newTasks.splice(draggedIndex, 1);
@@ -176,8 +179,8 @@ function Tasks() {
       const updatedTasks = await reorderTasks(taskOrders);
       setTasks(updatedTasks);
     } catch (err) {
-      // Revert on error
-      setTasks(tasks);
+      // Revert on error using original tasks
+      setTasks(originalTasks);
       setError('Failed to reorder tasks');
       console.error('Drag and drop error:', err);
     }

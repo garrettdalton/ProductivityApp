@@ -155,8 +155,14 @@ app.put('/api/tasks/:id/reorder', async (req, res) => {
     const id = parseInt(req.params.id);
     const { direction } = req.body; // 'up' or 'down'
     
+    console.log('Reorder task request:', { id, direction, body: req.body });
+    
     if (!direction || (direction !== 'up' && direction !== 'down')) {
       return res.status(400).json({ error: 'Direction must be "up" or "down"' });
+    }
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid task ID' });
     }
     
     await client.query('BEGIN');
@@ -211,16 +217,31 @@ app.put('/api/tasks/:id/reorder', async (req, res) => {
     
     await client.query('COMMIT');
     
-    // Return updated task list
-    const result = await pool.query(
-      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, spotify_playlist_id as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY position ASC, created_at ASC'
-    );
+    // Return updated task list - handle spotify_playlist_id column gracefully
+    let result;
+    try {
+      result = await pool.query(
+        'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, COALESCE(position, 0) as position, COALESCE(spotify_playlist_id, NULL) as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY COALESCE(position, 0) ASC, created_at ASC'
+      );
+    } catch (columnError) {
+      // Column doesn't exist, query without it
+      result = await pool.query(
+        'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, COALESCE(position, 0) as position, NULL as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY COALESCE(position, 0) ASC, created_at ASC'
+      );
+    }
     
+    console.log('Reorder successful, returning', result.rows.length, 'tasks');
     res.json(result.rows);
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Error during rollback:', rollbackError);
+    }
     console.error('Error reordering task:', error);
-    res.status(500).json({ error: 'Failed to reorder task' });
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to reorder task', details: error.message });
   } finally {
     client.release();
   }
@@ -232,8 +253,28 @@ app.put('/api/tasks/reorder', async (req, res) => {
   try {
     const { taskOrders } = req.body; // Array of { id, position }
     
+    console.log('Reorder request received:', { taskOrders, body: req.body });
+    
+    if (!taskOrders) {
+      return res.status(400).json({ error: 'taskOrders is required' });
+    }
+    
     if (!Array.isArray(taskOrders)) {
       return res.status(400).json({ error: 'taskOrders must be an array' });
+    }
+    
+    if (taskOrders.length === 0) {
+      return res.status(400).json({ error: 'taskOrders array cannot be empty' });
+    }
+    
+    // Validate each task order entry
+    for (const taskOrder of taskOrders) {
+      if (!taskOrder.hasOwnProperty('id') || !taskOrder.hasOwnProperty('position')) {
+        return res.status(400).json({ error: 'Each taskOrder must have id and position' });
+      }
+      if (typeof taskOrder.id !== 'number' || typeof taskOrder.position !== 'number') {
+        return res.status(400).json({ error: 'id and position must be numbers' });
+      }
     }
     
     await client.query('BEGIN');
@@ -245,16 +286,31 @@ app.put('/api/tasks/reorder', async (req, res) => {
     
     await client.query('COMMIT');
     
-    // Return updated task list
-    const result = await pool.query(
-      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, spotify_playlist_id as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY position ASC, created_at ASC'
-    );
+    // Return updated task list - handle spotify_playlist_id column gracefully
+    let result;
+    try {
+      result = await pool.query(
+        'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, COALESCE(position, 0) as position, COALESCE(spotify_playlist_id, NULL) as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY COALESCE(position, 0) ASC, created_at ASC'
+      );
+    } catch (columnError) {
+      // Column doesn't exist, query without it
+      result = await pool.query(
+        'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, COALESCE(position, 0) as position, NULL as "spotifyPlaylistId", created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY COALESCE(position, 0) ASC, created_at ASC'
+      );
+    }
     
+    console.log('Reorder successful, returning', result.rows.length, 'tasks');
     res.json(result.rows);
   } catch (error) {
-    await client.query('ROLLBACK');
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Error during rollback:', rollbackError);
+    }
     console.error('Error reordering tasks:', error);
-    res.status(500).json({ error: 'Failed to reorder tasks' });
+    console.error('Error details:', error.message);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to reorder tasks', details: error.message });
   } finally {
     client.release();
   }

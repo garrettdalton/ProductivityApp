@@ -112,6 +112,7 @@ export const reorderTask = async (id, direction) => {
   try {
     const response = await fetch(`${API_BASE_URL}/tasks/${id}/reorder`, {
       method: 'PUT',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -133,6 +134,7 @@ export const reorderTasks = async (taskOrders) => {
   try {
     const response = await fetch(`${API_BASE_URL}/tasks/reorder`, {
       method: 'PUT',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
