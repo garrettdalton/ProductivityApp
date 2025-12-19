@@ -1,6 +1,8 @@
 # Garrett's Productivity App
 
 My name is Garrett, and this application is the culmination of a year-long journey spent refining my personal workflow and physical training routines. Following an ADHD diagnosis midway through my college career, I became dedicated to researching and testing productivity frameworks to overcome challenges with executive function and sustained motivation. Developed as my final project for the Web Development program at **Lehman College**, this app integrates the strategies that proved most effective in my own academic and personal life.
+Deployed Site Available at:
+https://productivity-app-liart-mu.vercel.app/
 
 ## Functionality
 The application serves as a dynamic task management system designed for both deep work and interval-based physical training. Key features include:
