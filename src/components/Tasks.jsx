@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getTasks, deleteTask, updateTask, reorderTask } from '../services/api';
 import './Tasks.css';
 
@@ -6,10 +6,73 @@ function Tasks() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTimer, setActiveTimer] = useState(null); // { taskId, remainingSeconds }
+  const [isPaused, setIsPaused] = useState(false);
+  const [waitingForSkip, setWaitingForSkip] = useState(null); // Task ID we're waiting to skip to
+  const intervalRef = useRef(null);
+  const nextTaskTimeoutRef = useRef(null);
+  const tasksRef = useRef(tasks);
+  const taskCardRefs = useRef({});
+  
+  // Keep tasksRef in sync with tasks
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
+  // Scroll to active task when timer starts or when waiting for skip
+  useEffect(() => {
+    if (activeTimer && !isPaused) {
+      const taskCard = taskCardRefs.current[activeTimer.taskId];
+      if (taskCard) {
+        setTimeout(() => {
+          taskCard.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest'
+          });
+        }, 100);
+      }
+    } else if (waitingForSkip) {
+      const taskCard = taskCardRefs.current[waitingForSkip];
+      if (taskCard) {
+        setTimeout(() => {
+          taskCard.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest'
+          });
+        }, 100);
+      }
+    }
+  }, [activeTimer?.taskId, isPaused, waitingForSkip]);
 
   useEffect(() => {
     loadTasks();
   }, []);
+
+  useEffect(() => {
+    if (activeTimer && !isPaused && activeTimer.remainingSeconds > 0) {
+      intervalRef.current = setInterval(() => {
+        setActiveTimer((prev) => {
+          if (prev.remainingSeconds <= 1) {
+            handleTimerComplete(prev.taskId);
+            return null;
+          }
+          return {
+            ...prev,
+            remainingSeconds: prev.remainingSeconds - 1
+          };
+        });
+      }, 1000);
+    } else {
+      clearInterval(intervalRef.current);
+    }
+
+    return () => {
+      clearInterval(intervalRef.current);
+      clearTimeout(nextTaskTimeoutRef.current);
+    };
+  }, [activeTimer, isPaused]);
 
   const loadTasks = async () => {
     try {
@@ -55,9 +118,158 @@ function Tasks() {
     return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatSeconds = (totalSeconds) => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return formatTime(hours, minutes, seconds);
+  };
+
+  const playBeep = () => {
+    // Create a beep sound using Web Audio API
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    oscillator.frequency.value = 800; // Beep frequency
+    oscillator.type = 'sine';
+
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.5);
+  };
+
+  const handleStartTimer = (taskId) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task || !task.timerEnabled) return;
+
+    const totalSeconds = task.hours * 3600 + task.minutes * 60 + task.seconds;
+    if (totalSeconds <= 0) return;
+
+    // If there's already an active timer, pause it first
+    if (activeTimer && activeTimer.taskId !== taskId) {
+      setActiveTimer(null);
+      setIsPaused(false);
+    }
+
+    setActiveTimer({
+      taskId,
+      remainingSeconds: totalSeconds
+    });
+    setIsPaused(false);
+  };
+
+  const handlePauseTimer = () => {
+    setIsPaused(true);
+  };
+
+  const handleResumeTimer = () => {
+    setIsPaused(false);
+  };
+
+  const handleStopTimer = () => {
+    setActiveTimer(null);
+    setIsPaused(false);
+  };
+
+  const handleSkipToNext = () => {
+    const currentTasks = tasksRef.current;
+    let currentTaskId = null;
+    
+    if (activeTimer) {
+      currentTaskId = activeTimer.taskId;
+    } else if (waitingForSkip) {
+      // When waiting, use the waiting task as the current task
+      currentTaskId = waitingForSkip;
+    }
+    
+    if (currentTaskId === null) return;
+    
+    const currentIndex = currentTasks.findIndex(t => t.id === currentTaskId);
+    const nextTask = currentTasks[currentIndex + 1];
+    
+    if (nextTask) {
+      // Stop current timer
+      setActiveTimer(null);
+      setIsPaused(false);
+      setWaitingForSkip(null);
+      clearTimeout(nextTaskTimeoutRef.current);
+
+      // Always go to the next task and start it if it has a timer
+      if (nextTask.timerEnabled) {
+        const totalSeconds = nextTask.hours * 3600 + nextTask.minutes * 60 + nextTask.seconds;
+        if (totalSeconds > 0) {
+          setActiveTimer({
+            taskId: nextTask.id,
+            remainingSeconds: totalSeconds
+          });
+          setIsPaused(false);
+        } else {
+          // Timer is set to 0, so just move to next task without starting
+          setWaitingForSkip(nextTask.id);
+        }
+      } else {
+        // Next task has no timer, wait for another skip
+        setWaitingForSkip(nextTask.id);
+      }
+    }
+  };
+
+  const handleTimerComplete = (completedTaskId) => {
+    // Play beep
+    playBeep();
+
+    // Clear current timer
+    setActiveTimer(null);
+    setIsPaused(false);
+
+    // Find the next task using the latest tasks
+    const currentTasks = tasksRef.current;
+    const currentIndex = currentTasks.findIndex(t => t.id === completedTaskId);
+    const nextTask = currentTasks[currentIndex + 1];
+    
+    if (nextTask) {
+      if (nextTask.timerEnabled) {
+        // Next task has timer - wait 5 seconds, then start it
+        nextTaskTimeoutRef.current = setTimeout(() => {
+          const latestTasks = tasksRef.current;
+          const task = latestTasks.find(t => t.id === nextTask.id);
+          if (task && task.timerEnabled) {
+            const totalSeconds = task.hours * 3600 + task.minutes * 60 + task.seconds;
+            if (totalSeconds > 0) {
+              setActiveTimer({
+                taskId: task.id,
+                remainingSeconds: totalSeconds
+              });
+              setIsPaused(false);
+            }
+          }
+        }, 5000);
+      } else {
+        // Next task has no timer - wait for user to click skip
+        setWaitingForSkip(nextTask.id);
+      }
+    }
+  };
+
+  const getTimerDisplay = (task) => {
+    if (activeTimer && activeTimer.taskId === task.id) {
+      return formatSeconds(activeTimer.remainingSeconds);
+    }
+    return formatTime(task.hours, task.minutes, task.seconds);
+  };
+
+  const isTimerActive = (taskId) => {
+    return activeTimer && activeTimer.taskId === taskId && !isPaused;
+  };
+
+  const isTimerPaused = (taskId) => {
+    return activeTimer && activeTimer.taskId === taskId && isPaused;
   };
 
   if (loading) {
@@ -91,7 +303,11 @@ function Tasks() {
       ) : (
         <div className="tasks-list">
           {tasks.map((task, index) => (
-            <div key={task.id} className="task-card">
+            <div 
+              key={task.id} 
+              className={`task-card ${activeTimer && activeTimer.taskId === task.id ? 'task-active' : ''} ${waitingForSkip === task.id ? 'task-waiting' : ''}`}
+              ref={(el) => (taskCardRefs.current[task.id] = el)}
+            >
               <div className="task-header">
                 <div className="task-reorder-controls">
                   <button
@@ -123,25 +339,69 @@ function Tasks() {
                 </button>
               </div>
               
-              {task.timerEnabled && (
-                <div className="task-timer-info">
-                  <span className="timer-label">Timer:</span>
-                  <span className="timer-value">
-                    {formatTime(task.hours, task.minutes, task.seconds)}
-                  </span>
+              {waitingForSkip === task.id && (
+                <div className="task-waiting-message">
+                  <p>Click to go to next task</p>
+                  <button
+                    onClick={handleSkipToNext}
+                    className="timer-control-btn skip-btn"
+                  >
+                    Next Task
+                  </button>
                 </div>
               )}
-
-              <div className="task-meta">
-                <span className="task-date">
-                  Created: {formatDate(task.createdAt)}
-                </span>
-                {task.updatedAt !== task.createdAt && (
-                  <span className="task-date">
-                    Updated: {formatDate(task.updatedAt)}
-                  </span>
-                )}
-              </div>
+              
+              {task.timerEnabled && (
+                <div className="task-timer-section">
+                  <div className="task-timer-info">
+                    <span className="timer-label">Timer:</span>
+                    <span className={`timer-value ${activeTimer && activeTimer.taskId === task.id ? 'timer-active' : ''}`}>
+                      {getTimerDisplay(task)}
+                    </span>
+                  </div>
+                  <div className="timer-controls">
+                    {!activeTimer || activeTimer.taskId !== task.id ? (
+                      <button
+                        onClick={() => handleStartTimer(task.id)}
+                        className="timer-control-btn start-btn"
+                        disabled={task.hours === 0 && task.minutes === 0 && task.seconds === 0}
+                      >
+                        Start
+                      </button>
+                    ) : isPaused ? (
+                      <>
+                        <button
+                          onClick={handleResumeTimer}
+                          className="timer-control-btn resume-btn"
+                        >
+                          Resume
+                        </button>
+                        <button
+                          onClick={handleSkipToNext}
+                          className="timer-control-btn skip-btn"
+                        >
+                          Next Task
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={handlePauseTimer}
+                          className="timer-control-btn pause-btn"
+                        >
+                          Pause
+                        </button>
+                        <button
+                          onClick={handleSkipToNext}
+                          className="timer-control-btn skip-btn"
+                        >
+                          Next Task
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

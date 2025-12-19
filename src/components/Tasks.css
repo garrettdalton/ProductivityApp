@@ -90,12 +90,36 @@
   padding: 1.5rem;
   backdrop-filter: blur(10px);
   transition: all 0.3s ease;
+  scroll-margin-top: 2rem;
+  scroll-margin-bottom: 2rem;
 }
 
 .task-card:hover {
   border-color: rgba(102, 126, 234, 0.3);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.task-card.task-active {
+  background: rgba(102, 126, 234, 0.15);
+  border: 2px solid rgba(102, 126, 234, 0.5);
+  box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+  transform: scale(1.02);
+}
+
+.task-card.task-waiting {
+  background: rgba(245, 87, 108, 0.1);
+  border: 2px solid rgba(245, 87, 108, 0.4);
+  animation: pulse-waiting 2s ease-in-out infinite;
+}
+
+@keyframes pulse-waiting {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(245, 87, 108, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(245, 87, 108, 0.4);
+  }
 }
 
 .task-header {
@@ -152,13 +176,13 @@
 }
 
 .delete-btn {
-  background: rgba(245, 87, 108, 0.2);
-  border: 1px solid rgba(245, 87, 108, 0.3);
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  color: #f5576c;
-  font-size: 1.5rem;
+  background: rgba(118, 75, 162, 0.2);
+  border: 1px solid rgba(118, 75, 162, 0.4);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  color: #b794f6;
+  font-size: 1rem;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -166,11 +190,18 @@
   transition: all 0.3s ease;
   flex-shrink: 0;
   margin-left: 1rem;
+  min-width: 60px;
 }
 
 .delete-btn:hover {
-  background: rgba(245, 87, 108, 0.3);
-  transform: scale(1.1);
+  background: rgba(118, 75, 162, 0.3);
+  border-color: rgba(118, 75, 162, 0.6);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(118, 75, 162, 0.3);
+}
+
+.task-timer-section {
+  margin-top: 0.75rem;
 }
 
 .task-timer-info {
@@ -196,6 +227,124 @@
   color: #667eea;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.05em;
+  transition: all 0.3s ease;
+}
+
+.timer-value.timer-active {
+  color: #4ade80;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.timer-controls {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.timer-control-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  height: 36px;
+  min-width: fit-content;
+  width: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.start-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.start-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.start-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pause-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.pause-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.resume-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.resume-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.stop-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e4e4e4;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.stop-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-2px);
+}
+
+.skip-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.skip-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.task-waiting-message {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  background: rgba(245, 87, 108, 0.15);
+  border: 1px solid rgba(245, 87, 108, 0.3);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.task-waiting-message p {
+  margin: 0 0 0.75rem 0;
+  color: #f5576c;
+  font-weight: 500;
+  font-size: 0.95rem;
 }
 
 .task-meta {
