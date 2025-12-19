@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getTasks, deleteTask, updateTask, reorderTask } from '../services/api';
+import { getTasks, deleteTask, updateTask, reorderTask, reorderTasks } from '../services/api';
 import './Tasks.css';
 
 function Tasks() {
@@ -9,6 +9,8 @@ function Tasks() {
   const [activeTimer, setActiveTimer] = useState(null); // { taskId, remainingSeconds }
   const [isPaused, setIsPaused] = useState(false);
   const [waitingForSkip, setWaitingForSkip] = useState(null); // Task ID we're waiting to skip to
+  const [draggedTaskId, setDraggedTaskId] = useState(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState(null);
   const intervalRef = useRef(null);
   const nextTaskTimeoutRef = useRef(null);
   const tasksRef = useRef(tasks);
@@ -112,6 +114,78 @@ function Tasks() {
       setError(errorMessage);
       console.error('Reorder error:', err);
     }
+  };
+
+  const handleDragStart = (e, taskId) => {
+    // Don't start drag if clicking on buttons or interactive elements
+    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+      e.preventDefault();
+      return;
+    }
+    setDraggedTaskId(taskId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', taskId);
+  };
+
+  const handleDragOver = (e, taskId) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (taskId !== draggedTaskId) {
+      setDragOverTaskId(taskId);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverTaskId(null);
+  };
+
+  const handleDrop = async (e, dropTaskId) => {
+    e.preventDefault();
+    setDragOverTaskId(null);
+
+    if (!draggedTaskId || draggedTaskId === dropTaskId) {
+      setDraggedTaskId(null);
+      return;
+    }
+
+    const draggedIndex = tasks.findIndex(t => t.id === draggedTaskId);
+    const dropIndex = tasks.findIndex(t => t.id === dropTaskId);
+
+    if (draggedIndex === -1 || dropIndex === -1) {
+      setDraggedTaskId(null);
+      return;
+    }
+
+    // Create new array with reordered tasks
+    const newTasks = [...tasks];
+    const [removed] = newTasks.splice(draggedIndex, 1);
+    newTasks.splice(dropIndex, 0, removed);
+
+    // Update positions
+    const taskOrders = newTasks.map((task, index) => ({
+      id: task.id,
+      position: index
+    }));
+
+    // Optimistically update UI
+    setTasks(newTasks);
+    setDraggedTaskId(null);
+
+    // Update backend
+    try {
+      const updatedTasks = await reorderTasks(taskOrders);
+      setTasks(updatedTasks);
+    } catch (err) {
+      // Revert on error
+      setTasks(tasks);
+      setError('Failed to reorder tasks');
+      console.error('Drag and drop error:', err);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTaskId(null);
+    setDragOverTaskId(null);
   };
 
   const formatTime = (hours, minutes, seconds) => {
@@ -305,8 +379,14 @@ function Tasks() {
           {tasks.map((task, index) => (
             <div 
               key={task.id} 
-              className={`task-card ${activeTimer && activeTimer.taskId === task.id ? 'task-active' : ''} ${waitingForSkip === task.id ? 'task-waiting' : ''}`}
+              className={`task-card ${activeTimer && activeTimer.taskId === task.id ? 'task-active' : ''} ${waitingForSkip === task.id ? 'task-waiting' : ''} ${draggedTaskId === task.id ? 'task-dragging' : ''} ${dragOverTaskId === task.id ? 'task-drag-over' : ''}`}
               ref={(el) => (taskCardRefs.current[task.id] = el)}
+              draggable
+              onDragStart={(e) => handleDragStart(e, task.id)}
+              onDragOver={(e) => handleDragOver(e, task.id)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, task.id)}
+              onDragEnd={handleDragEnd}
             >
               <div className="task-header">
                 <div className="task-reorder-controls">

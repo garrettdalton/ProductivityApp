@@ -167,6 +167,40 @@ app.put('/api/tasks/:id/reorder', async (req, res) => {
   }
 });
 
+// PUT /api/tasks/reorder - Reorder tasks by updating positions
+app.put('/api/tasks/reorder', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { taskOrders } = req.body; // Array of { id, position }
+    
+    if (!Array.isArray(taskOrders)) {
+      return res.status(400).json({ error: 'taskOrders must be an array' });
+    }
+    
+    await client.query('BEGIN');
+    
+    // Update all positions
+    for (const { id, position } of taskOrders) {
+      await client.query('UPDATE tasks SET position = $1 WHERE id = $2', [position, id]);
+    }
+    
+    await client.query('COMMIT');
+    
+    // Return updated task list
+    const result = await pool.query(
+      'SELECT id, title, timer_enabled as "timerEnabled", hours, minutes, seconds, position, created_at as "createdAt", updated_at as "updatedAt" FROM tasks ORDER BY position ASC, created_at ASC'
+    );
+    
+    res.json(result.rows);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error reordering tasks:', error);
+    res.status(500).json({ error: 'Failed to reorder tasks' });
+  } finally {
+    client.release();
+  }
+});
+
 // PUT /api/tasks/:id - Update a task
 app.put('/api/tasks/:id', async (req, res) => {
   try {

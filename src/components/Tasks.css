@@ -92,12 +92,33 @@
   transition: all 0.3s ease;
   scroll-margin-top: 2rem;
   scroll-margin-bottom: 2rem;
+  cursor: grab;
+  user-select: none;
+}
+
+.task-card button,
+.task-card input {
+  cursor: pointer;
+  user-select: auto;
 }
 
 .task-card:hover {
   border-color: rgba(102, 126, 234, 0.3);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.task-card.task-dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+  transform: scale(0.95);
+}
+
+.task-card.task-drag-over {
+  border-color: rgba(102, 126, 234, 0.6);
+  border-width: 2px;
+  transform: translateY(0);
+  box-shadow: 0 0 20px rgba(102, 126, 234, 0.4);
 }
 
 .task-card.task-active {

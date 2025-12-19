@@ -105,3 +105,24 @@ export const reorderTask = async (id, direction) => {
   }
 };
 
+// Reorder tasks by updating positions (for drag and drop)
+export const reorderTasks = async (taskOrders) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/tasks/reorder`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ taskOrders }),
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || `Failed to reorder tasks: ${response.statusText}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Error reordering tasks:', error);
+    throw error;
+  }
+};
+
